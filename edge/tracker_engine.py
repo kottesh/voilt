@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from edge.tracking import TrackState
 from edge.types import Detection
@@ -41,8 +42,9 @@ class TrackMatch:
 class SimpleTracker:
     """Matches current motorcycles to previous tracks by IoU."""
 
-    def __init__(self, iou_threshold: float = 0.2) -> None:
+    def __init__(self, iou_threshold: float = 0.2, max_age_seconds: float = 30.0) -> None:
         self._iou_threshold = iou_threshold
+        self._max_age_seconds = max_age_seconds
         self._next_id = 1
         self._tracks: dict[str, TrackState] = {}
 
@@ -55,6 +57,7 @@ class SimpleTracker:
     def update(self, motorcycles: list[Detection]) -> list[TrackMatch]:
         """Assign track IDs for current motorcycles."""
 
+        self._evict_stale()
         matches: list[TrackMatch] = []
         used_track_ids: set[str] = set()
         for index, motorcycle in enumerate(motorcycles):
@@ -75,6 +78,18 @@ class SimpleTracker:
                 )
             )
         return matches
+
+    def _evict_stale(self) -> None:
+        """Remove tracks not seen within max_age_seconds."""
+
+        now = datetime.now(UTC)
+        stale_ids = [
+            track_id
+            for track_id, track in self._tracks.items()
+            if (now - track.last_seen).total_seconds() > self._max_age_seconds
+        ]
+        for track_id in stale_ids:
+            del self._tracks[track_id]
 
     def _match_existing(self, motorcycle: Detection, used_track_ids: set[str]) -> str | None:
         best_track_id: str | None = None
