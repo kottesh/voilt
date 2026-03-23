@@ -37,7 +37,7 @@ def main() -> None:
     best_weights = save_dir / "weights" / "best.pt"
 
     export_model = YOLO(str(best_weights))
-    export_model.export(format="ncnn", imgsz=args.imgsz)
+    export_model.export(format="ncnn", imgsz=args.imgsz, half=False)
 
     print(f"best_pt={best_weights}")
     print(f"ncnn_dir={best_weights.parent / 'best_ncnn_model'}")

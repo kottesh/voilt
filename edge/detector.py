@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Protocol
 
-import ultralytics
-
 from edge.types import Detection, FrameInput
 from shared.schemas import BBox
 
@@ -34,8 +32,9 @@ class YoloDetector:
     """YOLO runtime detector for realtime frame inference."""
 
     def __init__(self, model_path: str, conf: float = 0.25) -> None:
-        yolo_ctor = ultralytics.YOLO
-        self._model = yolo_ctor(model_path)
+        import ultralytics
+
+        self._model = ultralytics.YOLO(model_path)
         self._conf = conf
         self._labels = {
             "helmet",
