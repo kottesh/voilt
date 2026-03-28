@@ -8,7 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
-
+.env
 # Tooling caches and runtime artifacts
 .ruff_cache/
 *.db

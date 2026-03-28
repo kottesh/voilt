@@ -6,8 +6,8 @@ import json
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 
-from server.storage import InMemoryStore
-from server.verification import verify_event
+from server.services.storage import InMemoryStore
+from server.services.verification import verify_event
 from shared.schemas import EvidenceRef, ViolationEvent
 
 app = FastAPI(title="voilt-ingest")
