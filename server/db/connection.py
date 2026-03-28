@@ -1,5 +1,5 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import asyncpg
 from asyncpg import Connection, Pool
@@ -19,7 +19,7 @@ async def get_pool() -> Pool:
             min_size=2,
             max_size=10,
             command_timeout=30,
-            ssl="require",  
+            ssl="require",
         )
     return _pool
 

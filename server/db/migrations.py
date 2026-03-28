@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 from asyncpg import Connection
 
@@ -24,18 +24,14 @@ async def _bootstrap() -> None:
 
 async def run_migration(name: str, migration_fn: MigrationFn) -> None:
     async with get_transaction() as tx:
-        row = await tx.fetchrow(
-            "SELECT 1 FROM migrations WHERE name = $1", name
-        )
+        row = await tx.fetchrow("SELECT 1 FROM migrations WHERE name = $1", name)
         if row:
             logger.info("Skipping '%s' — already ran", name)
             return
 
         logger.info("Running migration '%s'", name)
         await migration_fn(tx)
-        await tx.execute(
-            "INSERT INTO migrations (name) VALUES ($1)", name
-        )
+        await tx.execute("INSERT INTO migrations (name) VALUES ($1)", name)
         logger.info("OK '%s'", name)
 
 
