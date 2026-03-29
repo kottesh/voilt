@@ -1,8 +1,9 @@
 """CRUD helpers for the violations table."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from asyncpg import Connection
@@ -38,9 +39,7 @@ async def insert_violation(
 
 
 async def get_violation(conn: Connection, violation_id: uuid.UUID) -> dict | None:
-    row = await conn.fetchrow(
-        "SELECT * FROM violations WHERE id = $1", violation_id
-    )
+    row = await conn.fetchrow("SELECT * FROM violations WHERE id = $1", violation_id)
     return dict(row) if row else None
 
 
@@ -52,13 +51,17 @@ async def list_violations(
 ) -> list[dict]:
     if status:
         rows = await conn.fetch(
-            "SELECT * FROM violations WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-            status, limit, offset,
+            "SELECT * FROM violations"
+            " WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            status,
+            limit,
+            offset,
         )
     else:
         rows = await conn.fetch(
             "SELECT * FROM violations ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-            limit, offset,
+            limit,
+            offset,
         )
     return [dict(r) for r in rows]
 
@@ -70,5 +73,6 @@ async def update_mailed_at(
 ) -> None:
     await conn.execute(
         "UPDATE violations SET mailed_at = $1, status = 'mailed' WHERE id = $2",
-        mailed_at, violation_id,
+        mailed_at,
+        violation_id,
     )

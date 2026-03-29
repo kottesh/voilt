@@ -34,6 +34,7 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 "server/app.py" = ["B008"]
+"server/api/ingest.py" = ["B008"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
