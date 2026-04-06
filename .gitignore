@@ -25,3 +25,4 @@ server/uploads/
 *.ip
 *.zip
 docs/
+node_modules/
