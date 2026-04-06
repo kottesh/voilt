@@ -11,11 +11,10 @@ from pathlib import Path
 from fastapi import APIRouter, Form, HTTPException, status
 from pydantic import BaseModel
 
-from server.core.config import ServerSettings
+from server.core.config import get_settings
 from server.worker.queue import enqueue
 
 logger = logging.getLogger(__name__)
-settings = ServerSettings()
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -28,6 +27,7 @@ class IngestResponse(BaseModel):
 
 def _save_evidence(image_bytes: bytes, job_id: str, index: int) -> str:
     """Persist an evidence image to disk; return the relative path."""
+    settings = get_settings()
     storage = Path(settings.IMAGE_STORAGE_PATH)
     storage.mkdir(parents=True, exist_ok=True)
     dest = storage / f"{job_id}_evidence_{index}.jpg"
@@ -58,7 +58,7 @@ async def ingest_event(
         event_data = json.loads(event_json)
     except json.JSONDecodeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Invalid event_json: {exc}",
         ) from exc
 

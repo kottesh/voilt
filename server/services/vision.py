@@ -14,11 +14,10 @@ from pathlib import Path
 import httpx
 from pydantic import BaseModel
 
-from server.core.config import ServerSettings
+from server.core.config import get_settings
 from server.services.falcon_engine import FALCON_AVAILABLE
 
 logger = logging.getLogger(__name__)
-settings = ServerSettings()
 
 SYSTEM_PROMPT = """You are a traffic-violation analysis system.
 You will receive an image from a traffic camera.
@@ -85,6 +84,8 @@ async def analyze_image(image: str | bytes | Path) -> VisionResult:
         httpx.HTTPStatusError: on non-2xx from the API.
         ValueError: if the model returns unparseable JSON.
     """
+    settings = get_settings()
+
     # Try Falcon first if available
     if FALCON_AVAILABLE:
         try:
@@ -188,6 +189,7 @@ async def _analyze_with_nvidia(image: str | bytes | Path) -> VisionResult:
     Uses NVIDIA's hosted models via their API.
     Supports both vision and text models.
     """
+    settings = get_settings()
     if not settings.NVIDIA_API_KEY:
         raise RuntimeError("NVIDIA_API_KEY must be configured")
 
@@ -334,6 +336,7 @@ async def _analyze_with_litai(image: str | bytes | Path) -> VisionResult:
     """
     from litai import LLM
 
+    settings = get_settings()
     if not settings.LITAI_API_KEY or not settings.LITAI_BILLING:
         raise RuntimeError("LITAI_API_KEY and LITAI_BILLING must be configured")
 
@@ -422,6 +425,7 @@ async def _analyze_with_gemma(image: str | bytes | Path) -> VisionResult:
     from PIL import Image
     from transformers import AutoModelForMultimodalLM, AutoProcessor
 
+    settings = get_settings()
     GEMMA_MODEL = "google/gemma-4-E2B-it"
     GEMMA_CACHE = settings.VISION_MODEL_CACHE if settings.VISION_MODEL_CACHE else None
 
@@ -512,6 +516,7 @@ async def _analyze_with_gemma(image: str | bytes | Path) -> VisionResult:
 
 async def _analyze_with_openai(image: str | bytes | Path) -> VisionResult:
     """Fallback: Call OpenAI GPT-4o Vision API."""
+    settings = get_settings()
     data_url = _load_image(image)
 
     payload = {

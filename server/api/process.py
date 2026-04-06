@@ -10,14 +10,13 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from server.core.config import ServerSettings
+from server.core.config import get_settings
 from server.db.connection import get_transaction
 from server.db.crud import insert_violation
 from server.services.vision import VisionResult, analyze_image
 from server.worker.queue import dequeue, queue_length
 
 logger = logging.getLogger(__name__)
-settings = ServerSettings()
 
 router = APIRouter(prefix="/process", tags=["process"])
 
@@ -101,7 +100,7 @@ async def process_next() -> ProcessResponse:
         image_bytes = _read_image(job)
     except (ValueError, KeyError) as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 
@@ -129,6 +128,7 @@ async def process_next() -> ProcessResponse:
         result.number_plate,
     )
 
+    settings = get_settings()
     if not result.is_violation or result.confidence < settings.CONFIDENCE_THRESHOLD:
         logger.info(
             "Job %s skipped (confidence %.3f < threshold %.3f)",

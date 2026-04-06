@@ -4,9 +4,7 @@ import json
 
 import redis.asyncio as aioredis
 
-from server.core.config import ServerSettings
-
-settings = ServerSettings()
+from server.core.config import get_settings
 
 QUEUE_KEY = "violation_queue"
 
@@ -16,6 +14,7 @@ _redis: aioredis.Redis | None = None
 async def get_redis() -> aioredis.Redis:
     global _redis
     if _redis is None:
+        settings = get_settings()
         _redis = aioredis.from_url(
             settings.REDIS_URL,
             encoding="utf-8",
