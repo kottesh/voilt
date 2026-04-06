@@ -35,7 +35,8 @@ Rules:
 - is_violation must be true or false (boolean, not string)
 - confidence must be a number between 0.0 and 1.0
 - number_plate must be either a string with the plate text, or null (NOT the string "null")
-- violation_type should be a brief label like "red-light", "speeding", "wrong-lane", "no helmet", "triple riding" or null
+- violation_type should be a brief label like "red-light", "speeding", "wrong-lane",
+  "no helmet", "triple riding" or null
 - If no plate is visible, set number_plate to null (not "null" or empty string)
 - If no violation is visible, set is_violation to false and confidence to 0.0
 
