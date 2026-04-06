@@ -10,14 +10,13 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from server.core.config import ServerSettings
+from server.core.config import get_settings
 from server.db.connection import get_transaction
 from server.db.crud import insert_violation
 from server.services.vision import VisionResult, analyze_image
 from server.worker.queue import dequeue, queue_length
 
 logger = logging.getLogger(__name__)
-settings = ServerSettings()
 
 router = APIRouter(prefix="/process", tags=["process"])
 
@@ -38,13 +37,25 @@ class ProcessResponse(BaseModel):
 
 
 def _read_image(job: dict) -> bytes:
-    """Return raw image bytes from the job payload (base64 embedded or file path)."""
+    """Return raw image bytes from the job payload (event.evidence or legacy format)."""
+    if event := job.get("event"):
+        if evidence := event.get("evidence"):
+            for ref in evidence:
+                if ref.get("kind") == "motorcycle_crop":
+                    uri = ref.get("uri")
+                    if uri:
+                        p = Path(uri)
+                        if p.exists():
+                            return p.read_bytes()
+                        logger.warning("Evidence path does not exist: %s", p)
     if b64 := job.get("image_b64"):
         return base64.b64decode(b64)
     if path := job.get("image_path"):
         p = Path(path)
         if p.exists():
             return p.read_bytes()
+        logger.warning("Image path does not exist: %s", p)
+    logger.warning("Job has no usable image source: %s", job.get("job_id"))
     raise ValueError(f"Job {job.get('job_id')} has no usable image source.")
 
 
@@ -89,7 +100,7 @@ async def process_next() -> ProcessResponse:
         image_bytes = _read_image(job)
     except (ValueError, KeyError) as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 
@@ -117,6 +128,7 @@ async def process_next() -> ProcessResponse:
         result.number_plate,
     )
 
+    settings = get_settings()
     if not result.is_violation or result.confidence < settings.CONFIDENCE_THRESHOLD:
         logger.info(
             "Job %s skipped (confidence %.3f < threshold %.3f)",

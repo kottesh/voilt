@@ -16,3 +16,12 @@ runs/
 dataset/
 edge/evidence
 IMPLEMENTATION.md
+best_ncnn_model
+data/
+yolov5_ncnn_fp16/
+.env
+server/uploads/
+*.pt
+*.ip
+*.zip
+docs/

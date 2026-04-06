@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
@@ -10,13 +11,17 @@ from server.app import app
 
 
 def test_ingest_accepts_image_file() -> None:
-    """POST /ingest with an image file returns 202 and a job_id."""
+    """POST /ingest with an event_json returns 202 and a job_id."""
     client = TestClient(app)
+    event_payload = {
+        "event_id": "test-event-1",
+        "camera_id": "cam-1",
+        "captured_at": "2024-01-01T12:00:00Z",
+    }
     with patch("server.api.ingest.enqueue", new_callable=AsyncMock, return_value=1):
         response = client.post(
             "/ingest",
-            files={"file": ("frame.jpg", b"fakejpgdata", "image/jpeg")},
-            data={"camera_id": "cam-1"},
+            data={"event_json": json.dumps(event_payload)},
         )
 
     assert response.status_code == 202
@@ -26,25 +31,24 @@ def test_ingest_accepts_image_file() -> None:
     assert "queued" in body["message"].lower()
 
 
-def test_ingest_rejects_non_image() -> None:
-    """POST /ingest with a non-image file returns 415."""
+def test_ingest_rejects_invalid_json() -> None:
+    """POST /ingest with invalid JSON returns 422."""
     client = TestClient(app)
     response = client.post(
         "/ingest",
-        files={"file": ("data.txt", b"hello", "text/plain")},
+        data={"event_json": "not valid json"},
     )
-    assert response.status_code == 415
+    assert response.status_code == 422
 
 
-def test_ingest_rejects_empty_file() -> None:
-    """POST /ingest with an empty file returns 400."""
+def test_ingest_rejects_missing_event_json() -> None:
+    """POST /ingest without event_json returns 422."""
     client = TestClient(app)
-    with patch("server.api.ingest.enqueue", new_callable=AsyncMock, return_value=1):
-        response = client.post(
-            "/ingest",
-            files={"file": ("frame.jpg", b"", "image/jpeg")},
-        )
-    assert response.status_code == 400
+    response = client.post(
+        "/ingest",
+        data={},
+    )
+    assert response.status_code == 422
 
 
 def test_health_returns_ok() -> None:

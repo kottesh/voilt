@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 
@@ -65,6 +66,10 @@ def run_realtime(
 ) -> None:
     """Run continuous edge loop over camera or video source."""
 
+    if not headless and not os.environ.get("DISPLAY"):
+        headless = True
+        print("no DISPLAY env var detected, enabling headless mode")
+
     queue = SQLiteEventQueue(settings.queue_db_path)
     location_provider = LocationProvider()
     location_provider.update_from_network(lat=12.97, lon=77.59, accuracy_m=120.0, source="ip")
@@ -100,10 +105,14 @@ def run_realtime(
 
             if not headless and frame.image is not None:
                 _draw_detections(frame, result.detections)
-                cv2.imshow("voilt-edge", frame.image)
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord("q"):
-                    break
+                try:
+                    cv2.imshow("voilt-edge", frame.image)
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord("q"):
+                        break
+                except cv2.error:
+                    print("display error, falling back to headless mode")
+                    headless = True
 
             if stats.frames % 30 == 0:
                 elapsed = max(1e-6, time.time() - stats.started_at)
