@@ -10,7 +10,7 @@ from shared.config import BaseAppSettings
 class ServerSettings(BaseAppSettings):
     """Settings for ingest API and persistence."""
 
-    DATABASE_URL: str
+    DATABASE_URL: str = "postgresql://localhost/voilt_test"  # Override in production via env
     REDIS_URL: str = "redis://localhost:6379"
     VISION_API_KEY: str = ""
     VISION_MODEL: str = "gpt-4o"
