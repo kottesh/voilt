@@ -1,7 +1,7 @@
 """Vision model service using Falcon-Perception and Falcon-OCR.
 
 Primary vision engine: Falcon-Perception + Falcon-OCR
-Fallback: OpenAI GPT-4o Vision (if Falcon unavailable or API key configured)
+Fallback: Gemini 3 Flash Preview, LitAI, local Gemma, or OpenAI GPT-4o Vision
 """
 
 from __future__ import annotations
@@ -93,12 +93,12 @@ async def analyze_image(image: str | bytes | Path) -> VisionResult:
         except Exception as exc:
             logger.warning("Falcon analysis failed, falling back to next backend: %s", exc)
 
-    # Try NVIDIA API
-    if settings.NVIDIA_API_KEY:
+    # Try Gemini API
+    if settings.GEMINI_API_KEY:
         try:
-            return await _analyze_with_nvidia(image)
+            return await _analyze_with_gemini_flash(image)
         except Exception as exc:
-            logger.warning("NVIDIA analysis failed, falling back to next backend: %s", exc)
+            logger.warning("Gemini analysis failed, falling back to next backend: %s", exc)
 
     # Try LitAI (cloud Gemma)
     if settings.LITAI_API_KEY and settings.LITAI_BILLING:
@@ -120,7 +120,7 @@ async def analyze_image(image: str | bytes | Path) -> VisionResult:
     # No vision backend available
     raise RuntimeError(
         "No vision backend available. "
-        "Install Falcon-Perception, configure NVIDIA_API_KEY, LITAI, "
+        "Install Falcon-Perception, configure GEMINI_API_KEY, LITAI, "
         "use local Gemma, or configure VISION_API_KEY"
     )
 
@@ -183,82 +183,98 @@ async def _analyze_with_falcon(image: str | bytes | Path) -> VisionResult:
     )
 
 
-async def _analyze_with_nvidia(image: str | bytes | Path) -> VisionResult:
-    """Analyze image using NVIDIA API.
+async def _analyze_with_gemini_flash(image: str | bytes | Path) -> VisionResult:
+    """Analyze image using Google Gemini 3 Flash Preview.
 
-    Uses NVIDIA's hosted models via their API.
-    Supports both vision and text models.
+    Uses the google-genai SDK with thinking capabilities.
     """
-    settings = get_settings()
-    if not settings.NVIDIA_API_KEY:
-        raise RuntimeError("NVIDIA_API_KEY must be configured")
+    from google import genai
+    from google.genai import types
 
-    # Load and encode image as base64
+    settings = get_settings()
+    if not settings.GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY must be configured")
+
+    # Load image as bytes
     if isinstance(image, Path):
         image = image.read_bytes()
     if isinstance(image, str):
         image = base64.b64decode(image)
 
-    # Convert to base64 data URL
-    image_b64 = base64.b64encode(image).decode("utf-8")
-    data_url = f"data:image/jpeg;base64,{image_b64}"
-
-    model_name = settings.NVIDIA_MODEL
-
-    # Build request payload
-    payload = {
-        "model": model_name,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": SYSTEM_PROMPT},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            }
-        ],
-        "max_tokens": 512,
-        "temperature": 0.15,
-        "stream": False,
-    }
-
-    headers = {
-        "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
-        "Accept": "application/json",
-    }
+    model_name = settings.GEMINI_MODEL
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(
-                "https://integrate.api.nvidia.com/v1/chat/completions",
-                headers=headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            result = response.json()
-    except httpx.HTTPStatusError as exc:
-        logger.error(
-            "NVIDIA API call failed (model=%s, status=%s): %s",
-            model_name,
-            exc.response.status_code,
-            exc.response.text,
+        # Initialize Gemini client
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+        # Build content with text prompt and image
+        contents = [
+            types.Content(
+                role="user",
+                parts=[
+                    types.Part.from_text(text=SYSTEM_PROMPT),
+                    types.Part.from_bytes(
+                        data=image,
+                        mime_type="image/jpeg",
+                    ),
+                ],
+            ),
+        ]
+
+        # Configure generation with thinking enabled
+        generate_content_config = types.GenerateContentConfig(
+            temperature=0.15,
+            max_output_tokens=1024,  # Increased to prevent truncation
+            thinking_config=types.ThinkingConfig(
+                thinking_level="HIGH",
+            ),
         )
-        raise RuntimeError(f"NVIDIA analysis failed: {exc}") from exc
+
+        # Generate content (non-streaming)
+        response = client.models.generate_content(
+            model=model_name,
+            contents=contents,
+            config=generate_content_config,
+        )
+
+        # Check if response was truncated
+        if response.candidates:
+            finish_reason = response.candidates[0].finish_reason
+            if finish_reason and finish_reason.name not in ("STOP", "MAX_TOKENS"):
+                logger.warning(
+                    "Gemini response finish_reason=%s, may be incomplete", finish_reason.name
+                )
+
+        # Extract text from response parts (filter out thinking if needed)
+        # response.text automatically concatenates all text parts
+        raw_text = ""
+        if response.candidates and response.candidates[0].content.parts:
+            # Try to extract from parts explicitly
+            text_parts = []
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, "text") and part.text:
+                    text_parts.append(part.text)
+            raw_text = "".join(text_parts).strip()
+
+        # Fallback to response.text if parts extraction failed
+        if not raw_text:
+            raw_text = response.text.strip()
+
+        # Log response details
+        logger.info(
+            "Gemini response: candidates=%d, parts=%d, text_len=%d, finish=%s",
+            len(response.candidates) if response.candidates else 0,
+            len(response.candidates[0].content.parts) if response.candidates else 0,
+            len(raw_text),
+            response.candidates[0].finish_reason.name if response.candidates else "N/A",
+        )
+
     except Exception as exc:
-        logger.error("NVIDIA API call failed (model=%s): %s", model_name, exc)
-        raise RuntimeError(f"NVIDIA analysis failed: {exc}") from exc
+        logger.error("Gemini API call failed (model=%s): %s", model_name, exc)
+        raise RuntimeError(f"Gemini analysis failed: {exc}") from exc
 
-    # Log full API response for debugging
-    logger.debug(
-        "NVIDIA API response (model=%s): %s",
-        model_name,
-        json.dumps(result, indent=2),
-    )
-
-    # Extract response text
-    raw_text = result["choices"][0]["message"]["content"].strip()
     logger.info(
-        "NVIDIA raw response text (model=%s): %s",
+        "Gemini raw response text (model=%s): %s",
         model_name,
         raw_text[:500] if len(raw_text) > 500 else raw_text,
     )
@@ -268,18 +284,22 @@ async def _analyze_with_nvidia(image: str | bytes | Path) -> VisionResult:
         data = json.loads(raw_text)
     except json.JSONDecodeError:
         # Try to clean up markdown formatting
-        raw_text = raw_text.replace("```json", "").replace("```", "").strip()
+        cleaned_text = raw_text.replace("```json", "").replace("```", "").strip()
         try:
-            data = json.loads(raw_text)
+            data = json.loads(cleaned_text)
         except json.JSONDecodeError as exc:
-            logger.error("NVIDIA returned non-JSON: %s", raw_text[:200])
-            raise ValueError("NVIDIA model returned non-JSON response") from exc
+            logger.error(
+                "Gemini returned non-JSON (len=%d): %s",
+                len(raw_text),
+                raw_text[:500],  # Show more context
+            )
+            raise ValueError(f"Gemini model returned non-JSON response: {raw_text[:200]}") from exc
 
     # Validate required fields and types
     if "is_violation" not in data:
-        raise ValueError("NVIDIA response missing 'is_violation' field")
+        raise ValueError("Gemini response missing 'is_violation' field")
     if "confidence" not in data:
-        raise ValueError("NVIDIA response missing 'confidence' field")
+        raise ValueError("Gemini response missing 'confidence' field")
 
     is_violation = data["is_violation"]
     if not isinstance(is_violation, bool):
@@ -296,7 +316,7 @@ async def _analyze_with_nvidia(image: str | bytes | Path) -> VisionResult:
     # Handle number_plate - reject string "null"
     number_plate = data.get("number_plate")
     if isinstance(number_plate, str) and number_plate.lower() == "null":
-        logger.warning("NVIDIA returned string 'null' for number_plate, converting to None")
+        logger.warning("Gemini returned string 'null' for number_plate, converting to None")
         number_plate = None
     elif number_plate is not None and not isinstance(number_plate, str):
         logger.warning("number_plate is not string or null, converting: %s", number_plate)
@@ -305,14 +325,14 @@ async def _analyze_with_nvidia(image: str | bytes | Path) -> VisionResult:
     # Handle violation_type - reject string "null"
     violation_type = data.get("violation_type")
     if isinstance(violation_type, str) and violation_type.lower() == "null":
-        logger.warning("NVIDIA returned string 'null' for violation_type, converting to None")
+        logger.warning("Gemini returned string 'null' for violation_type, converting to None")
         violation_type = None
     elif violation_type is not None and not isinstance(violation_type, str):
         logger.warning("violation_type is not string or null, converting: %s", violation_type)
         violation_type = str(violation_type) if violation_type else None
 
     logger.info(
-        "NVIDIA analysis (model=%s): violation=%s, conf=%.2f, plate=%s, type=%s",
+        "Gemini analysis (model=%s): violation=%s, conf=%.2f, plate=%s, type=%s",
         model_name,
         is_violation,
         confidence,

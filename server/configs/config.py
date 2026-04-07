@@ -18,8 +18,8 @@ class ServerSettings(BaseAppSettings):
     LITAI_API_KEY: str = ""
     LITAI_BILLING: str = ""
     LITAI_MODEL: str = "meta-llama/Llama-3.2-11B-Vision-Instruct"  # Vision-capable model
-    NVIDIA_API_KEY: str = ""
-    NVIDIA_MODEL: str = "mistralai/mistral-large-3-675b-instruct-2512"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3-flash-preview"
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""

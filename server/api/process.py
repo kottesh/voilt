@@ -74,9 +74,9 @@ def _send_violation_email(
     confidence: float,
 ) -> None:
     """
-    Send a violation alert email to the configured RECEIVER_MAIL via Gmail SMTP.
+    Send a violation alert email to the configured MAIL_TO via Gmail SMTP.
 
-    Uses SENDER_MAIL + SENDER_APP_PASSWORD from settings (Gmail App Password,
+    Uses MAIL_FROM + SMTP_PASSWORD from settings (Gmail App Password,
     not the account password). Attaches the evidence image.
 
     This is intentionally called outside the DB transaction so that an SMTP
@@ -116,8 +116,8 @@ Traffic Violation Monitoring System
 
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = settings.SENDER_MAIL
-    msg["To"] = settings.RECEIVER_MAIL
+    msg["From"] = settings.MAIL_FROM
+    msg["To"] = settings.MAIL_TO
     msg.set_content(body)
 
     # Attach the evidence image
@@ -136,9 +136,16 @@ Traffic Violation Monitoring System
     msg.add_attachment(image_bytes, maintype=maintype, subtype=subtype, filename=filename)
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-            smtp.login(settings.MAIL_FROM, settings.SMTP_PASSWORD)
-            smtp.send_message(msg)
+        # Use SMTP_SSL for port 465, SMTP with STARTTLS for port 587
+        if settings.SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT) as smtp:
+                smtp.login(settings.MAIL_FROM, settings.SMTP_PASSWORD)
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as smtp:
+                smtp.starttls()
+                smtp.login(settings.MAIL_FROM, settings.SMTP_PASSWORD)
+                smtp.send_message(msg)
         logger.info(
             "Violation alert email sent for violation %s (plate=%s) to %s",
             violation_id,
@@ -146,9 +153,7 @@ Traffic Violation Monitoring System
             settings.MAIL_TO,
         )
     except smtplib.SMTPAuthenticationError:
-        logger.error(
-            "SMTP authentication failed — check SENDER_MAIL and SENDER_APP_PASSWORD in settings."
-        )
+        logger.error("SMTP authentication failed — check MAIL_FROM and SMTP_PASSWORD in settings.")
     except smtplib.SMTPException as exc:
         logger.exception("Failed to send violation alert email for job %s: %s", job_id, exc)
 
@@ -168,7 +173,7 @@ async def process_next() -> ProcessResponse:
        confidence >= `CONFIDENCE_THRESHOLD` (default 0.9).
     4. **Persist** — inserts a row into `violations` with status `confirmed`.
     5. **Email alert** — sends a Gmail notification with the evidence image attached
-       to `RECEIVER_MAIL`. Failures are logged but do not affect the HTTP response.
+       to `MAIL_TO`. Failures are logged but do not affect the HTTP response.
     6. **Skip** — if below threshold, logs and returns `skipped` (nothing written).
 
     Designed to be called by a worker loop or an external scheduler.
