@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, X, RefreshCcw, Image as ImageIcon } from 'lucide-react';
+import { violationsService } from '../services/violationsService';
 
 // --- Types ---
 type StatusType = 'pending' | 'invested' | 'skipped';
@@ -13,20 +14,7 @@ interface VehicleRecord {
   status: StatusType;
 }
 
-// --- Sub-Component: Status Badge ---
-const StatusBadge = ({ status }: { status: StatusType }) => {
-  const styles = {
-    pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    invested: 'bg-blue-100 text-blue-800 border-blue-200',
-    skipped: 'bg-slate-100 text-slate-600 border-slate-200'
-  };
 
-  return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium border ${styles[status]} capitalize`}>
-      {status}
-    </span>
-  );
-};
 
 // --- Sub-Component: Image Modal ---
 const ImageModal = ({ isOpen, imageUrl, plate, onClose }: { isOpen: boolean; imageUrl: string; plate: string; onClose: () => void }) => {
@@ -58,53 +46,65 @@ const ImageModal = ({ isOpen, imageUrl, plate, onClose }: { isOpen: boolean; ima
 };
 
 export const VehicleTable = () => {
-  // -- State --
-  const [allData, setAllData] = useState<VehicleRecord[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterDate, setFilterDate] = useState('');
-  const [filterConfidence, setFilterConfidence] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  
-  // Modal State
-  const [modalImage, setModalImage] = useState<{ url: string; plate: string } | null>(null);
+// -- State --
+const [allData, setAllData] = useState<VehicleRecord[]>([]);
+const [searchTerm, setSearchTerm] = useState('');
+const [filterDate, setFilterDate] = useState('');
+const [filterConfidence, setFilterConfidence] = useState('');
+const [currentPage, setCurrentPage] = useState(1);
+const [loading, setLoading] = useState<boolean>(true);
+const [error, setError] = useState<string | null>(null);
+
+// Modal State
+const [modalImage, setModalImage] = useState<{ url: string; plate: string } | null>(null);
 
   const itemsPerPage = 7;
 
-  // -- Initialization: Generate Dummy Data --
-  useEffect(() => {
-    const generateDummyData = (): VehicleRecord[] => {
-      const statuses: StatusType[] = ['pending', 'invested', 'skipped'];
-      const data: VehicleRecord[] = [];
+// Fetch data from API when component mounts or filters change
+useEffect(() => {
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch violations from the service
+      // We'll fetch a reasonable limit to ensure we have enough data for filtering
+      const response = await violationsService.getViolations(null, 200, 0); // Get up to 200 violations
       
-      for (let i = 1; i <= 55; i++) {
-        const randomDate = new Date(2023, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1);
-        const dateStr = randomDate.toISOString().split('T')[0];
-        
-        data.push({
-          id: `REC-${1000 + i}`,
-          number_plate: `${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${Math.floor(Math.random() * 9000 + 1000)} ${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}`,
-          confidence_level: Math.floor(Math.random() * 40 + 60), // 60-100%
-          image_url: `https://picsum.photos/seed/${i + 100}/400/300`,
-          date: dateStr,
-          status: statuses[Math.floor(Math.random() * statuses.length)]
-        });
-      }
-      return data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    };
+      // Map API response to VehicleRecord format
+      const mappedData: VehicleRecord[] = response.violations
+        .filter(violation => violation.number_plate && violation.evidence_image_url && violation.captured_at) // Filter out incomplete records
+        .map(violation => ({
+          id: violation.id,
+          number_plate: violation.number_plate,
+          confidence_level: violation.confidence_level,
+          image_url: violation.evidence_image_url,
+          date: violation.captured_at.split('T')[0], // Extract date part only
+          status: violation.status as StatusType // Assuming status matches our StatusType
+        }));
+      
+      setAllData(mappedData);
+    } catch (err) {
+      console.error('Failed to fetch violations:', err);
+      setError('Failed to load violation data. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    // Simulating an API fetch
-    setAllData(generateDummyData());
-  }, []);
+  fetchData();
+}, [searchTerm, filterDate, filterConfidence]); // Refetch when filters change
 
-  // -- Filtering Logic --
-  const filteredData = useMemo(() => {
-    return allData.filter(item => {
-      const matchesSearch = item.number_plate.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesDate = filterDate ? item.date === filterDate : true;
-      const matchesConfidence = filterConfidence ? item.confidence_level >= parseInt(filterConfidence) : true;
-      return matchesSearch && matchesDate && matchesConfidence;
-    });
-  }, [allData, searchTerm, filterDate, filterConfidence]);
+// -- Filtering Logic --
+const filteredData = useMemo(() => {
+  return allData.filter(item => {
+    const matchesSearch = item.number_plate.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDate = filterDate ? item.date === filterDate : true;
+    const matchesConfidence = filterConfidence 
+      ? item.confidence_level >= parseInt(filterConfidence) 
+      : true;
+    return matchesSearch && matchesDate && matchesConfidence;
+  });
+}, [allData, searchTerm, filterDate, filterConfidence]);
 
   // -- Pagination Logic --
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
@@ -131,11 +131,37 @@ export const VehicleTable = () => {
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8">
       
-      {/* Header */}
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Vehicle Recognition Log</h1>
-        <p className="text-slate-500 mt-1">Manage and investigate automated license plate records.</p>
-      </header>
+       {/* Header */}
+       <header className="mb-8">
+         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Vehicle Recognition Log</h1>
+         <p className="text-slate-500 mt-1">Manage and investigate automated license plate records.</p>
+       </header>
+
+       {/* Loading State */}
+       {loading && !error && (
+         <div className="text-center py-12">
+           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+           <p className="text-slate-500">Loading violation data...</p>
+         </div>
+       )}
+
+       {/* Error State */}
+       {error && (
+         <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6">
+           <p className="font-medium">{error}</p>
+           <button 
+             onClick={() => {
+               setSearchTerm('');
+               setFilterDate('');
+               setFilterConfidence('');
+               setCurrentPage(1);
+             }}
+             className="mt-2 inline-block px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition-colors"
+           >
+             Retry
+           </button>
+         </div>
+       )}
 
       {/* Controls / Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
