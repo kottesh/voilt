@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from server.db.connection import get_transaction
@@ -14,17 +12,17 @@ router = APIRouter(prefix="/violations", tags=["violations"])
 
 class ViolationResponse(BaseModel):
     id: str
-    number_plate: Optional[str]
+    number_plate: str | None
     confidence_level: float
-    evidence_image_url: Optional[str]
-    camera_id: Optional[str]
+    evidence_image_url: str | None
+    camera_id: str | None
     captured_at: str
     status: str
     created_at: str
 
 
 class ViolationsListResponse(BaseModel):
-    violations: List[ViolationResponse]
+    violations: list[ViolationResponse]
     total: int
     limit: int
     offset: int
@@ -36,7 +34,7 @@ class ViolationsListResponse(BaseModel):
     summary="List violations with pagination",
 )
 async def list_violations_endpoint(
-    status: Optional[str] = Query(None, description="Filter by status"),
+    violation_status: str | None = Query(None, alias="status", description="Filter by status"),
     limit: int = Query(50, ge=1, le=100, description="Number of items to return"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
 ):
@@ -50,15 +48,15 @@ async def list_violations_endpoint(
     async with get_transaction() as conn:
         violations = await list_violations(
             conn,
-            status=status,
+            status=violation_status,
             limit=limit,
             offset=offset,
         )
 
         # Get total count for pagination
-        if status:
+        if violation_status:
             total_row = await conn.fetchrow(
-                "SELECT COUNT(*) FROM violations WHERE status = $1", status
+                "SELECT COUNT(*) FROM violations WHERE status = $1", violation_status
             )
         else:
             total_row = await conn.fetchrow("SELECT COUNT(*) FROM violations")

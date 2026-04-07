@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import os
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
 from server.core.config import get_settings
+from shared.schemas import VerifiedEvent, ViolationEvent
 
 
 def get_image_url(image_path: str | None) -> str | None:
@@ -49,11 +50,6 @@ def get_image_url(image_path: str | None) -> str | None:
     except (ValueError, OSError):
         # If there's any issue with the path, return None
         return None
-
-
-# Keep the existing InMemoryStore class for backward compatibility
-from dataclasses import dataclass
-from shared.schemas import VerifiedEvent, ViolationEvent
 
 
 @dataclass
