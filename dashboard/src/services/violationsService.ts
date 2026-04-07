@@ -21,7 +21,7 @@ export interface ViolationsResponse {
 
 // Create a Ky instance with base URL
 const api = ky.create({
-  prefixUrl: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  prefix: import.meta.env.VITE_API_URL || 'http://localhost:8000',
   timeout: 10000,
   retry: {
     limit: 2,
