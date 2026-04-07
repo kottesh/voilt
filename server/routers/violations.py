@@ -35,14 +35,14 @@ class ViolationsListResponse(BaseModel):
 )
 async def list_violations_endpoint(
     violation_status: str | None = Query(None, alias="status", description="Filter by status"),
-    limit: int = Query(50, ge=1, le=100, description="Number of items to return"),
+    limit: int = Query(50, ge=1, le=500, description="Number of items to return"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
 ):
     """
     Get a paginated list of violations.
 
     - **status**: Filter by violation status (pending, confirmed, mailed, etc.)
-    - **limit**: Maximum number of records to return (1-100)
+    - **limit**: Maximum number of records to return (1-500)
     - **offset**: Number of records to skip for pagination
     """
     async with get_transaction() as conn:
