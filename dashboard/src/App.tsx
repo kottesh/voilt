@@ -1,14 +1,8 @@
-import React from 'react'
-
 import './App.css'
-import {VehicleTable} from "./components/table"
-function App() {
+import { Dashboard } from "./components/Dashboard"
 
-  return (
-    <>
-      <VehicleTable></VehicleTable>
-    </>
-  )
+function App() {
+  return <Dashboard />
 }
 
 export default App

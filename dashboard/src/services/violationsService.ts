@@ -21,7 +21,6 @@ export interface ViolationsResponse {
 
 // Create a Ky instance with base URL
 const api = ky.create({
-  prefix: import.meta.env.VITE_API_URL || 'http://localhost:8000',
   timeout: 10000,
   retry: {
     limit: 2,
@@ -43,14 +42,14 @@ export const violationsService = {
     searchParams.append('limit', limit.toString());
     searchParams.append('offset', offset.toString());
     
-     const response = await api.get(`/violations?${searchParams.toString()}`).json();
-    return response;
+     const response = await api.get(`api/violations?${searchParams.toString()}`).json();
+    return response as ViolationsResponse;
   },
   
   // Fetch a single violation by ID
   getViolationById: async (id: string): Promise<Violation> => {
-     const response = await api.get(`/violations/${id}`).json();
-    return response;
+     const response = await api.get(`api/violations/${id}`).json();
+    return response as Violation;
   },
   
   // Get total count of violations (optional helper)
@@ -59,7 +58,7 @@ export const violationsService = {
     if (status) searchParams.append('status', status);
     
     // This would require a separate endpoint for count, but we can derive from getViolations
-     const response = await api.get(`/violations?${searchParams.toString()}&limit=1&offset=0`).json();
+     const response = await api.get(`api/violations?${searchParams.toString()}&limit=1&offset=0`).json() as ViolationsResponse;
     return response.total;
   }
 };
