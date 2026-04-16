@@ -6,6 +6,7 @@ import logging
 import os
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from server.api.ingest import router as ingest_router
@@ -21,6 +22,15 @@ app = FastAPI(
     title="Traffic Violation Server",
     description="Ingest edge-camera frames, run vision analysis, persist confirmed violations.",
     version="0.1.0",
+)
+
+# Configure CORS to allow frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(ingest_router)
