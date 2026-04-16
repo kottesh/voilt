@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, X, RefreshCcw, Image as ImageIcon } from 'lucide-react';
 import { violationsService } from '../services/violationsService';
 
@@ -7,9 +7,9 @@ type StatusType = 'pending' | 'invested' | 'skipped';
 
 interface VehicleRecord {
   id: string;
-  number_plate: string;
+  number_plate: string | null;
   confidence_level: number;
-  image_url: string;
+  image_url: string | null;
   date: string;
   status: StatusType;
 }
@@ -97,7 +97,7 @@ useEffect(() => {
 // -- Filtering Logic --
 const filteredData = useMemo(() => {
   return allData.filter(item => {
-    const matchesSearch = item.number_plate.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = item.number_plate?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false;
     const matchesDate = filterDate ? item.date === filterDate : true;
     const matchesConfidence = filterConfidence 
       ? item.confidence_level >= parseInt(filterConfidence) 
@@ -125,7 +125,7 @@ const filteredData = useMemo(() => {
     ));
   };
 
-  const openModal = (url: string, plate: string) => setModalImage({ url, plate });
+  const openModal = (url: string | null, plate: string | null) => setModalImage({ url: url || '', plate: plate || 'Unknown' });
   const closeModal = () => setModalImage(null);
 
   return (
@@ -242,7 +242,7 @@ const filteredData = useMemo(() => {
                     </td>
                     <td className="p-4">
                       <span className="font-mono font-medium text-slate-800 bg-slate-100 px-2 py-1 rounded">
-                        {record.number_plate}
+                        {record.number_plate ?? 'N/A'}
                       </span>
                     </td>
                     <td className="p-4">
