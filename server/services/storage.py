@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
-from server.core.config import get_settings
 from shared.schemas import VerifiedEvent, ViolationEvent
 
 
@@ -16,8 +15,8 @@ def get_image_url(image_path: str | None) -> str | None:
 
     If image_path is None, returns None.
     If image_path is already a URL (starts with http), returns it as-is.
-    Otherwise, treats it as a local path relative to IMAGE_STORAGE_PATH and
-    returns a URL path that can be served by a static file server.
+    Otherwise, treats it as a local path and returns a URL path that can be
+    served by the static file server mounted at /images (which serves the storage/ directory).
     """
     if not image_path:
         return None
@@ -26,26 +25,36 @@ def get_image_url(image_path: str | None) -> str | None:
     if image_path.startswith(("http://", "https://")):
         return image_path
 
-    settings = get_settings()
-    storage_path = Path(settings.IMAGE_STORAGE_PATH)
-
-    # Make sure the path is within the storage directory for security
     try:
         image_path_obj = Path(image_path)
-        # Resolve to absolute path and check if it's within storage
-        resolved_path = (storage_path / image_path_obj).resolve()
-        storage_path_resolved = storage_path.resolve()
-
-        # Check if the resolved path is within the storage directory
-        if not str(resolved_path).startswith(str(storage_path_resolved)):
-            # Security violation - path tries to escape storage
+        
+        # Check if the file exists
+        if not image_path_obj.exists():
             return None
 
-        # Return a URL path that can be served by static file server
-        # We'll assume the frontend can access images at /images/{filename}
-        # In a real deployment, this would be configured by your web server
-        relative_path = resolved_path.relative_to(storage_path_resolved)
-        return f"/images/{quote(str(relative_path))}"
+        # The server mounts the 'storage' directory at '/images'
+        # So we need to remove the 'storage/' prefix from the path
+        path_str = str(image_path_obj)
+        
+        # Handle both absolute and relative paths
+        if path_str.startswith("storage/"):
+            # Remove 'storage/' prefix since it's mounted at /images
+            relative_path = path_str[len("storage/"):]
+        elif image_path_obj.is_absolute():
+            # For absolute paths, try to make them relative to storage directory
+            storage_path = Path("storage").resolve()
+            resolved_path = image_path_obj.resolve()
+            try:
+                relative_path = str(resolved_path.relative_to(storage_path))
+            except ValueError:
+                # Path is not within storage directory
+                return None
+        else:
+            # Path is already relative, use as-is
+            relative_path = path_str
+
+        # Return URL path with proper encoding
+        return f"/images/{quote(relative_path)}"
 
     except (ValueError, OSError):
         # If there's any issue with the path, return None

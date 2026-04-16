@@ -1,7 +1,7 @@
 """Vision model service using Falcon-Perception and Falcon-OCR.
 
 Primary vision engine: Falcon-Perception + Falcon-OCR
-Fallback: Gemini 3 Flash Preview, LitAI, local Gemma, or OpenAI GPT-4o Vision
+Fallback: Gemini 3 Flash Preview, LitAI, or OpenAI GPT-4o Vision
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def _load_image(source: str | bytes | Path) -> str:
 
 
 async def analyze_image(image: str | bytes | Path) -> VisionResult:
-    """Analyze image using Falcon-Perception + OCR (primary), Gemma 4, or OpenAI (fallbacks).
+    """Analyze image using Falcon-Perception + OCR (primary), Gemini, or OpenAI (fallbacks).
 
     Args:
         image: evidence image as raw bytes, base64-encoded string, or Path.
@@ -107,12 +107,6 @@ async def analyze_image(image: str | bytes | Path) -> VisionResult:
         except Exception as exc:
             logger.warning("LitAI analysis failed, falling back to next backend: %s", exc)
 
-    # Try local Gemma 4
-    try:
-        return await _analyze_with_gemma(image)
-    except Exception as exc:
-        logger.warning("Local Gemma analysis failed, falling back to OpenAI: %s", exc)
-
     # Fallback to OpenAI if API key configured
     if settings.VISION_API_KEY:
         return await _analyze_with_openai(image)
@@ -121,7 +115,7 @@ async def analyze_image(image: str | bytes | Path) -> VisionResult:
     raise RuntimeError(
         "No vision backend available. "
         "Install Falcon-Perception, configure GEMINI_API_KEY, LITAI, "
-        "use local Gemma, or configure VISION_API_KEY"
+        "or configure VISION_API_KEY"
     )
 
 
@@ -424,103 +418,6 @@ async def _analyze_with_litai(image: str | bytes | Path) -> VisionResult:
     logger.info(
         "LitAI analysis (model=%s): violation=%s, conf=%.2f, plate=%s",
         model_name,
-        data.get("is_violation"),
-        data.get("confidence"),
-        data.get("number_plate"),
-    )
-
-    return VisionResult(
-        is_violation=bool(data.get("is_violation", False)),
-        confidence=float(data.get("confidence", 0.0)),
-        number_plate=data.get("number_plate"),
-        violation_type=data.get("violation_type"),
-    )
-
-
-async def _analyze_with_gemma(image: str | bytes | Path) -> VisionResult:
-    """Analyze image using Google Gemma 4."""
-    from functools import lru_cache
-    from io import BytesIO
-
-    from PIL import Image
-    from transformers import AutoModelForMultimodalLM, AutoProcessor
-
-    settings = get_settings()
-    GEMMA_MODEL = "google/gemma-4-E2B-it"
-    GEMMA_CACHE = settings.VISION_MODEL_CACHE if settings.VISION_MODEL_CACHE else None
-
-    @lru_cache(maxsize=1)
-    def _load_gemma_model():
-        logger.info("Loading Gemma 4 model: %s (cache: %s)", GEMMA_MODEL, GEMMA_CACHE)
-        processor = AutoProcessor.from_pretrained(
-            GEMMA_MODEL,
-            cache_dir=GEMMA_CACHE,
-        )
-        model = AutoModelForMultimodalLM.from_pretrained(
-            GEMMA_MODEL,
-            dtype="auto",
-            device_map="auto",
-            cache_dir=GEMMA_CACHE,
-        )
-        logger.info("Gemma 4 model loaded successfully")
-        return processor, model
-
-    # Load image
-    if isinstance(image, Path):
-        image = image.read_bytes()
-    if isinstance(image, str):
-        image = base64.b64decode(image)
-
-    pil_image = Image.open(BytesIO(image)).convert("RGB")
-
-    processor, model = _load_gemma_model()
-
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "image": pil_image},
-                {
-                    "type": "text",
-                    "text": SYSTEM_PROMPT,
-                },
-            ],
-        }
-    ]
-
-    inputs = processor.apply_chat_template(
-        messages,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt",
-        add_generation_prompt=True,
-    ).to(model.device)
-    input_len = inputs["input_ids"].shape[-1]
-
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=256,
-        temperature=1.0,
-        top_p=0.95,
-        top_k=64,
-    )
-    response = processor.decode(outputs[0][input_len:], skip_special_tokens=False)
-    parsed = processor.parse_response(response)
-
-    raw_text = parsed.get("text", "").strip()
-
-    try:
-        data = json.loads(raw_text)
-    except json.JSONDecodeError:
-        raw_text = raw_text.replace("```json", "").replace("```", "")
-        try:
-            data = json.loads(raw_text)
-        except json.JSONDecodeError as exc:
-            logger.error("Gemma returned non-JSON: %s", raw_text[:200])
-            raise ValueError("Gemma model returned non-JSON response") from exc
-
-    logger.info(
-        "Gemma analysis: violation=%s, conf=%.2f, plate=%s",
         data.get("is_violation"),
         data.get("confidence"),
         data.get("number_plate"),

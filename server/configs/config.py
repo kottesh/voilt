@@ -14,7 +14,6 @@ class ServerSettings(BaseAppSettings):
     REDIS_URL: str = "redis://localhost:6379"
     VISION_API_KEY: str = ""
     VISION_MODEL: str = "gpt-4o"
-    VISION_MODEL_CACHE: str = "/home/anush/.cache/huggingface/hub/models--google--gemma-4-E2B-it"
     LITAI_API_KEY: str = ""
     LITAI_BILLING: str = ""
     LITAI_MODEL: str = "meta-llama/Llama-3.2-11B-Vision-Instruct"  # Vision-capable model
