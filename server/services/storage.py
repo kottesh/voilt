@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
+from server.core.config import get_settings
 from shared.schemas import VerifiedEvent, ViolationEvent
 
 
@@ -55,10 +56,10 @@ def get_image_url(image_path: str | None) -> str | None:
 
         # Return URL path with proper encoding
         return f"/images/{quote(relative_path)}"
+    settings = get_settings()
+    storage_path = Path(settings.IMAGE_STORAGE_PATH)
 
-    except (ValueError, OSError):
-        # If there's any issue with the path, return None
-        return None
+   
 
 
 @dataclass
