@@ -27,7 +27,7 @@ def get_image_url(image_path: str | None) -> str | None:
 
     try:
         image_path_obj = Path(image_path)
-        
+
         # Check if the file exists
         if not image_path_obj.exists():
             return None
@@ -35,11 +35,11 @@ def get_image_url(image_path: str | None) -> str | None:
         # The server mounts the 'storage' directory at '/images'
         # So we need to remove the 'storage/' prefix from the path
         path_str = str(image_path_obj)
-        
+
         # Handle both absolute and relative paths
         if path_str.startswith("storage/"):
             # Remove 'storage/' prefix since it's mounted at /images
-            relative_path = path_str[len("storage/"):]
+            relative_path = path_str[len("storage/") :]
         elif image_path_obj.is_absolute():
             # For absolute paths, try to make them relative to storage directory
             storage_path = Path("storage").resolve()
